@@ -172,7 +172,7 @@ def band_psd_dataset_creator(files,list_idx_channels,list_labels,type_psd="welch
     
 # create dataset for coherence
 # Create dataset
-def coh_dataset_creator(files,list_idx_channels,list_labels,type_="numpy"):
+def coh_dataset_creator(files,list_idx_channels,list_labels,type_coh="welch"):
 
     """
     Take the data from every file and collect only those corresponding to GDF-left or GDF-right in the interest_data list
@@ -185,104 +185,74 @@ def coh_dataset_creator(files,list_idx_channels,list_labels,type_="numpy"):
     features = []
     labels = []
     dict_sorted_labels = {list_labels[i]:i for i in range(len(list_labels))}
+    freqs = None
 
     for file in files:
-        data = mne.io.read_raw_edf(file, preload=True)
-        raw_data = data.get_data()
-        fs = data.info['sfreq']
-        total_events, dict = mne.events_from_annotations(data)
-        for i in range(len(total_events)-1):
-            start = total_events[i][0]
-            if i == len(total_events) - 1:
-                end = raw_data.shape[1]
-            else:
-                end = total_events[i+1][0]
-            label = total_events[i][2]
-            if label in list_labels:
-                coh = np.zeros((len(list_idx_channels),len(list_idx_channels)))
-                for j in range(len(list_idx_channels)):
-                    for k in range(j+1,len(list_idx_channels)):
-                        f,Cxy = sc.signal.coherence(raw_data[list_idx_channels[j], start:end], raw_data[list_idx_channels[k], start:end], fs=fs, nperseg=200, noverlap=100)
-                        coh[j,k] = np.mean(Cxy[np.argwhere((f >= 4) & (f <= 40)).flatten()])
-                features.append(coh.flatten())
-                labels.append(dict_sorted_labels[label])
+        try : 
+            for event_name in list_labels:
+                raw_training, events_from_annot,event_id = load_file_eeg(filepath = file)
+                tmin = 0
+                tmax = 4
+                event_var = select_Event(event_name,raw_training,events_from_annot,event_id,tmin,tmax,64)
+                data = event_var.get_data()
+                fs = event_var.info['sfreq']
+                data = data[:,list_idx_channels,:]
+                if type_coh == "welch":
+                    for idx_chan1 in range(data.shape[1]):
+                        for idx_chan2 in range(data.shape[1]):
+                            f, Cxy = sc.signal.coherence(data[:,idx_chan1,:],data[:,idx_chan2,:],fs = fs, nperseg=300, noverlap=150, detrend="constant")
+                            idx_freq = np.argwhere((f >= 4) & (f <= 100)).flatten()
+                            coh_feature = np.zeros((data.shape[0],data.shape[1],data.shape[1],len(idx_freq)))
+                            if freqs is None:
+                                freqs = f[idx_freq]
+                            coh_feature[:,idx_chan1,idx_chan2,:] = Cxy[:,idx_freq]
+                if type_coh == "burg":
+                    noverlap = 150
+                    nperseg = 500
+                    fs = 500
+                    f_max = 100
+                    N_fft = 200
+                    filter_order = 19
+                    Pxx, Time_freq, time = spectral_analysis.Power_burg_calculation(data,noverlap,N_fft,f_max, nperseg,filter_order)   
+                features.append(coh_feature)
+                labels.append(dict_sorted_labels[event_name]*np.ones(data.shape[0]))
+        except Exception as e:
+            print("Error in file: ", file)
+            print(e)
 
-    features = np.array(features)
-    labels = np.array(labels)
-
-    if type_ == "torch":
-        features = torch.Tensor(features).unsqueeze(1).float()
-        labels = torch.Tensor(labels).long()
+    if len(features) == 1:
+        features = np.array(features)
+    else:
+        features = np.concatenate(features, axis=0)
+    labels = np.concatenate(labels,axis=0)
     
-    return features,labels
-
-class EEG_COH_Dataset_Multi_Subject():
-    def __init__(self, parent_folder_path, num_subjects, num_sessions, num_runs, list_idx_channels, list_labels, type_="numpy", band=False, data="physionet"):
-
-        if data == "physionet":
-            subject_folders = []
-            for i in num_subjects:
-                if i < 10:
-                    subject_folders.append("S00" + str(i))
-                elif i < 100:
-                    subject_folders.append("S0" + str(i))
-                else:
-                    subject_folders.append("S" + str(i))
-
-            file_list = []
-            for folder_name in subject_folders:
-                subject_folder_path = os.path.join(parent_folder_path, folder_name)
-
-                for i in num_runs:
-                    if i < 10:
-                        file_list.append(os.path.join(subject_folder_path, folder_name + "R0" + str(i) + ".edf"))
-                    else:
-                        file_list.append(os.path.join(subject_folder_path, folder_name + "R" + str(i) + ".edf"))
-            
-            self.file_list = file_list
-
-        if data == "bci":
-            subject_folders = os.path.join(parent_folder_path, "sub-" + num_subjects[0])
-            sessions_folders = [os.path.join(os.path.join(subject_folders, "ses-0" + str(i)),"EEG") for i in num_sessions]
-            files_list = []
-            for session_folder in sessions_folders:
-                li = os.listdir(session_folder)
-                for file in li:
-                    if file.endswith(".edf"):
-                        files_list.append(os.path.join(session_folder, file))
-            self.file_list = files_list
-        self.features,self.labels = coh_dataset_creator(self.file_list,list_idx_channels,type_=type_)
-        
-    def __len__(self):
-        return len(self.features)
-
-    def __getitem__(self, idx):
-        return self.features[idx], self.labels[idx]
-    
-    def transform_datase_numpy_to_torch(self):
-        self.features = torch.Tensor(self.features).unsqueeze(1).float()
-        self.labels = torch.Tensor(self.labels).long()
+    return features,labels,freqs
     
 class Braccio_Dataset_Multi_Subject():
     def __init__(self, parent_folder_path, num_subjects, num_sessions, list_idx_channels, list_labels, feature_type):
-
+        
+        # Create the list of folders
         subject_folders = [os.path.join(parent_folder_path, "sub-0" + str(num_sub)) if num_sub < 10 else os.path.join(parent_folder_path, "sub-" + str(num_sub)) for num_sub in num_subjects]
         sessions_folders = [os.path.join(os.path.join(subject_folders[j], "ses-0" + str(i)),"EEG") for i in num_sessions for j in range(len(num_subjects))]
+
+        # Create the list of files
         files_list = []
         for session_folder in sessions_folders:
             li = [f for f in os.listdir(session_folder) if not f.startswith("._")] 
             for file in li:
                 if file.endswith(".edf"):
                     files_list.append(os.path.join(session_folder, file))
-
         self.file_list = files_list
 
+        # Choose the type of feature to extract
         if feature_type == "time":
             self.features,self.labels = time_dataset_creator(self.file_list,list_idx_channels,list_labels)
         if feature_type == "psd":
             self.features,self.labels,self.freqs = psd_dataset_creator(self.file_list,list_idx_channels,list_labels)
         if feature_type == "band":
             self.features,self.labels = band_psd_dataset_creator(self.file_list,list_idx_channels,list_labels)
+        if feature_type == "coh":
+            self.features,self.labels,self.freqs = coh_dataset_creator(self.file_list,list_idx_channels,list_labels)
         
     def __len__(self):
         return len(self.features)
@@ -291,14 +261,18 @@ class Braccio_Dataset_Multi_Subject():
         return self.features[idx], self.labels[idx]
     
     def transform_dataset_numpy_to_torch(self):
+        # Transform the numpy arrays to torch tensors
         self.features = torch.Tensor(self.features).float()
         self.labels = torch.Tensor(self.labels).long()
     
 class Physio_Dataset_Multi_Subject():
-    # Create dataset for training on physionet data with multiple subjects
+    """
+    Class which creates a dataset for the PhysioNet data
+    """
 
     def __init__(self, parent_folder_path, num_subjects, num_runs, list_idx_channels, list_labels, feature_type):
 
+        # Create the list of folders
         subject_folders = []
         for i in num_subjects:
             if i < 10:
@@ -308,6 +282,7 @@ class Physio_Dataset_Multi_Subject():
             else:
                 subject_folders.append("S" + str(i))
 
+        # Create the list of files
         file_list = []
         for folder_name in subject_folders:
             subject_folder_path = os.path.join(parent_folder_path, folder_name)
@@ -317,15 +292,17 @@ class Physio_Dataset_Multi_Subject():
                     file_list.append(os.path.join(subject_folder_path, folder_name + "R0" + str(i) + ".edf"))
                 else:
                     file_list.append(os.path.join(subject_folder_path, folder_name + "R" + str(i) + ".edf"))
-        
         self.file_list = file_list
 
+        # Choose the type of feature to extract
         if feature_type == "time":
             self.features,self.labels = time_dataset_creator(self.file_list,list_idx_channels,list_labels)
         if feature_type == "psd":
             self.features,self.labels,self.freqs = psd_dataset_creator(self.file_list,list_idx_channels,list_labels)
         if feature_type == "band":
             self.features,self.labels = band_psd_dataset_creator(self.file_list,list_idx_channels,list_labels)
+        if feature_type == "coh":
+            self.features,self.labels,self.freqs = coh_dataset_creator(self.file_list,list_idx_channels,list_labels)
         
     def __len__(self):
         return len(self.features)
@@ -334,5 +311,6 @@ class Physio_Dataset_Multi_Subject():
         return self.features[idx], self.labels[idx]
 
     def transform_dataset_numpy_to_torch(self):
+        # Transform the numpy arrays to torch tensors
         self.features = torch.Tensor(self.features).float()
         self.labels = torch.Tensor(self.labels).long()
