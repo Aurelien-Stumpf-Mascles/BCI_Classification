@@ -78,7 +78,7 @@ def psd_dataset_creator(files,list_idx_channels,list_labels,type_psd="welch"):
                 tmax = 4
                 event_var = select_Event(event_name,raw_training,events_from_annot,event_id,tmin,tmax,64)
                 data = event_var.get_data()
-                print(data.shape)
+                #print(data.shape)
                 fs = event_var.info['sfreq']
                 data = data[:,list_idx_channels,:]
                 if type_psd == "welch":
@@ -88,13 +88,12 @@ def psd_dataset_creator(files,list_idx_channels,list_labels,type_psd="welch"):
                         freqs = f[idx_freq]
                     Pxx = Pxx[:,:,idx_freq]
                 if type_psd == "burg":
-                    noverlap = 150
-                    nperseg = 500
+                    noverlap = 100
+                    nperseg = 200
                     fs = 500
-                    f_max = 100
-                    N_fft = 200
+                    N_fft = 300
                     filter_order = 19
-                    Pxx, Time_freq, time = spectral_analysis.Power_burg_calculation(data,noverlap,N_fft,f_max, nperseg,filter_order)
+                    Pxx, freqs = spectral_analysis.Power_burg_calculation(data,noverlap,N_fft,fs, nperseg,filter_order)
                     
                 features.append(Pxx)
                 labels.append(dict_sorted_labels[event_name]*np.ones(data.shape[0]))
@@ -205,7 +204,8 @@ def coh_dataset_creator(files,list_idx_channels,list_labels,type_coh="welch"):
                             coh_feature = np.zeros((data.shape[0],data.shape[1],data.shape[1],len(idx_freq)))
                             if freqs is None:
                                 freqs = f[idx_freq]
-                            coh_feature[:,idx_chan1,idx_chan2,:] = Cxy[:,idx_freq]
+                            coh_feature[:,idx_chan1,idx_chan2,:] = np.abs(Cxy[:,idx_freq])
+                        
                 if type_coh == "burg":
                     noverlap = 150
                     nperseg = 500
@@ -213,9 +213,7 @@ def coh_dataset_creator(files,list_idx_channels,list_labels,type_coh="welch"):
                     f_max = 100
                     N_fft = 200
                     filter_order = 19
-                    Pxx, Time_freq, time = spectral_analysis.Power_burg_calculation(data,noverlap,N_fft,f_max, nperseg,filter_order)   
-                features.append(coh_feature)
-                labels.append(dict_sorted_labels[event_name]*np.ones(data.shape[0]))
+
         except Exception as e:
             print("Error in file: ", file)
             print(e)
@@ -293,6 +291,36 @@ class Physio_Dataset_Multi_Subject():
                 else:
                     file_list.append(os.path.join(subject_folder_path, folder_name + "R" + str(i) + ".edf"))
         self.file_list = file_list
+
+        # Choose the type of feature to extract
+        if feature_type == "time":
+            self.features,self.labels = time_dataset_creator(self.file_list,list_idx_channels,list_labels)
+        if feature_type == "psd":
+            self.features,self.labels,self.freqs = psd_dataset_creator(self.file_list,list_idx_channels,list_labels)
+        if feature_type == "band":
+            self.features,self.labels = band_psd_dataset_creator(self.file_list,list_idx_channels,list_labels)
+        if feature_type == "coh":
+            self.features,self.labels,self.freqs = coh_dataset_creator(self.file_list,list_idx_channels,list_labels)
+        
+    def __len__(self):
+        return len(self.features)
+
+    def __getitem__(self, idx):
+        return self.features[idx], self.labels[idx]
+
+    def transform_dataset_numpy_to_torch(self):
+        # Transform the numpy arrays to torch tensors
+        self.features = torch.Tensor(self.features).float()
+        self.labels = torch.Tensor(self.labels).long()
+
+class EEG_Dataset():
+    """
+    Class which creates a dataset for the PhysioNet data
+    """
+
+    def __init__(self, files_list, list_idx_channels, list_labels, feature_type):
+
+        self.file_list = files_list
 
         # Choose the type of feature to extract
         if feature_type == "time":

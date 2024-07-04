@@ -157,11 +157,11 @@ def Power_burg_calculation_optimization(Epoch_compute,noverlap,N_FFT,f_max, n_pe
     return trialspectrum[:,round(f_max/(2*fres)):round(f_max/fres)],Time_freq,time
 
 
-def Power_burg_calculation(Epoch_compute,noverlap,N_FFT,f_max, n_per_seg,filter_order):
+def Power_burg_calculation(Epoch_compute, noverlap, N_FFT, fs, n_per_seg, filter_order):
     #burg = pburg(Epoch_compute,15,NFFT = nfft_test)
 
     a = Epoch_compute.shape
-    print(a)
+    #print(a)
     M = a[2]  # M = trial length, in samples
     L = n_per_seg  # L = windowing size, in samples
     noverlap = noverlap  # size of overlapping segment btw windows, in samples
@@ -171,13 +171,13 @@ def Power_burg_calculation(Epoch_compute,noverlap,N_FFT,f_max, n_per_seg,filter_
     xStart = np.array(range(0, k*(L-noverlap), L-noverlap))
     xEnd = xStart.copy() + L
 
-    fres = f_max/N_FFT
+    fres = fs/N_FFT
+    freqs = np.linspace(0, fs, N_FFT)
+    freqs = freqs[:N_FFT//2]
 
     tab = np.array(range(k))  # tab = indices of overlapping windows
     trialspectrum = np.zeros([a[0],a[1],N_FFT])
-    PSD_final = np.zeros([a[0],a[1],round(f_max/2)])
     Time_freq = np.zeros([a[0],a[1],len(tab),N_FFT//2])
-    time = np.linspace(0,round(M/f_max),k-1)
     ITC = np.zeros((a[0], a[1], N_FFT),dtype=np.complex_)
 
     for i in range(a[0]):
@@ -187,11 +187,10 @@ def Power_burg_calculation(Epoch_compute,noverlap,N_FFT,f_max, n_per_seg,filter_
             for numBlock in tab:
                 windowData = Epoch_compute[i, j, xStart[numBlock]:xEnd[numBlock]]
                 windowData = signal.detrend(windowData, type='constant')
-
                 AR, sigma2 = transform.burg(windowData, filter_order)
-                PSD = arma2psd(-AR, NFFT=N_FFT, sides='centerdc')
-                print(PSD.shape)
-                PSD_complex = arma2psd_complex(-AR, NFFT=N_FFT, sides='centerdc')
+                PSD = arma2psd(-AR, NFFT=N_FFT, T = fs, sides='centerdc')
+                #print(PSD.shape)
+                PSD_complex = arma2psd_complex(-AR, NFFT=N_FFT, T = fs, sides='centerdc')
                 Block_spectrum.append(PSD)
                 Block_complex.append(PSD_complex)
                 Time_freq[i, j, numBlock] = PSD[:PSD.shape[0]//2]
@@ -203,7 +202,7 @@ def Power_burg_calculation(Epoch_compute,noverlap,N_FFT,f_max, n_per_seg,filter_
             #print(np.angle(np.array(Block_complex).mean(0)))
             ITC[i, j] = np.exp(1j * np.angle(np.array(Block_complex).mean(0)))
 
-    return trialspectrum[:,:,round(f_max/(2*fres)):round(f_max/fres)], Time_freq, time
+    return trialspectrum[:,:,N_FFT//2:], freqs
 
 def Power_calculation_welch_method(Epoch_compute,f_min,f_max,t_min,t_max,nfft,noverlap,nper_seg,pick,proje,averag,windowing, smoothing):
     #filtered = mne.filter.filter_data(Epoch_compute, 140, 7, 35)
