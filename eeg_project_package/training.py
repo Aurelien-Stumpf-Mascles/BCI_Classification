@@ -18,6 +18,15 @@ def train_model(model,trainloader,testloader,device,criterion,epochs=1,optimizer
         size = 0
 
         with tqdm(trainloader, total=len(trainloader), unit="batch", desc=f'Epoch {epoch}') as tepoch:
+
+            if epoch % print_epoch == 0:
+                print(f'Epoch {epoch}')
+                print("lr: ", optimizer.param_groups[0]['lr'])
+                print("-------------------------")
+                evaluate_classification_model(model,trainloader,device,criterion,dataset="Train")
+                evaluate_classification_model(model,testloader,device,criterion,dataset="Test")
+                print("-------------------------")
+                
             for X,y in tepoch:
                 tepoch.set_description(f"Epoch {epoch}")
                 X = X.to(device)
@@ -41,13 +50,6 @@ def train_model(model,trainloader,testloader,device,criterion,epochs=1,optimizer
             
             scheduler.step()
 
-            if epoch % print_epoch == 0:
-                print(f'Epoch {epoch}')
-                print("lr: ", optimizer.param_groups[0]['lr'])
-                print("-------------------------")
-                evaluate_classification_model(model,trainloader,device,criterion,dataset="Train")
-                evaluate_classification_model(model,testloader,device,criterion,dataset="Test")
-                print("-------------------------")
 
 #Evaluating the model with balanced accuracy
 def evaluate_classification_model(model,dataloader,device,criterion,dataset="Train"):

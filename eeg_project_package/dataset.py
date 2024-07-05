@@ -17,7 +17,7 @@ def select_Event(event_name,RAW_data,events_from_annot,event_id,t_min,t_max,numb
     return epochs_training[event_name]
     
 # EEG Dataset for multiple subject
-def time_dataset_creator(files, list_idx_channels, list_labels, freq=500):
+def time_dataset_creator(files, list_idx_channels, list_labels, tmin=0, tmax=4):
 
     """
     Take the data from every file and collect only those corresponding to GDF-left or GDF-right in the interest_data list
@@ -35,11 +35,9 @@ def time_dataset_creator(files, list_idx_channels, list_labels, freq=500):
         try : 
             for event_name in list_labels:
                 raw_training, events_from_annot,event_id = load_file_eeg(filepath = file)
-                tmin = 0
-                tmax = 4
                 event_var = select_Event(event_name,raw_training,events_from_annot,event_id,tmin,tmax,64)
                 data = event_var.get_data()
-                print(data.shape)
+                #print(data.shape)
                 data = data[:,list_idx_channels,:]
                 features.append(data)
                 labels.append(dict_sorted_labels[event_name]*np.ones(data.shape[0]))
@@ -55,7 +53,7 @@ def time_dataset_creator(files, list_idx_channels, list_labels, freq=500):
     return features, labels
 
 # Create dataset for PSD
-def psd_dataset_creator(files,list_idx_channels,list_labels,type_psd="welch"):
+def psd_dataset_creator(files,list_idx_channels,list_labels,type_psd="welch",tmin=0,tmax=4,fs=500,fmin=4,fmax=100,nfft=300,noverlap=150,nperseg=300,filter_order=19):
 
     """
     Take the data from every file and collect only those corresponding to GDF-left or GDF-right in the interest_data list
@@ -74,26 +72,18 @@ def psd_dataset_creator(files,list_idx_channels,list_labels,type_psd="welch"):
         try : 
             for event_name in list_labels:
                 raw_training, events_from_annot,event_id = load_file_eeg(filepath = file)
-                tmin = 0
-                tmax = 4
                 event_var = select_Event(event_name,raw_training,events_from_annot,event_id,tmin,tmax,64)
                 data = event_var.get_data()
-                #print(data.shape)
                 fs = event_var.info['sfreq']
                 data = data[:,list_idx_channels,:]
                 if type_psd == "welch":
-                    f, Pxx = sc.signal.welch(data, fs = fs, nperseg=300, noverlap=150, detrend="constant")
-                    idx_freq = np.argwhere((f >= 4) & (f <= 100)).flatten()
+                    f, Pxx = sc.signal.welch(data, fs = fs, nperseg=nperseg, noverlap=noverlap, detrend="constant")
+                    idx_freq = np.argwhere((f >= fmin) & (f <=fmax)).flatten()
                     if freqs is None:
                         freqs = f[idx_freq]
                     Pxx = Pxx[:,:,idx_freq]
                 if type_psd == "burg":
-                    noverlap = 100
-                    nperseg = 200
-                    fs = 500
-                    N_fft = 300
-                    filter_order = 19
-                    Pxx, freqs = spectral_analysis.Power_burg_calculation(data,noverlap,N_fft,fs, nperseg,filter_order)
+                    Pxx, freqs = spectral_analysis.Power_burg_calculation(data,noverlap,nfft,fs, nperseg,filter_order)
                     
                 features.append(Pxx)
                 labels.append(dict_sorted_labels[event_name]*np.ones(data.shape[0]))
@@ -109,7 +99,7 @@ def psd_dataset_creator(files,list_idx_channels,list_labels,type_psd="welch"):
     
     return features,labels,freqs
 
-def band_psd_dataset_creator(files,list_idx_channels,list_labels,type_psd="welch"):
+def band_psd_dataset_creator(files,list_idx_channels,list_labels,type_psd="welch",tmin=0,tmax=4,fs=500,nfft=300,noverlap=150,nperseg=300,filter_order=19):
 
     """
     Take the data from every file and collect only those corresponding to GDF-left or GDF-right in the interest_data list
@@ -130,14 +120,12 @@ def band_psd_dataset_creator(files,list_idx_channels,list_labels,type_psd="welch
         try : 
             for event_name in list_labels:
                 raw_training, events_from_annot,event_id = load_file_eeg(filepath = file)
-                tmin = 0
-                tmax = 4
                 event_var = select_Event(event_name,raw_training,events_from_annot,event_id,tmin,tmax,64)
                 data = event_var.get_data()
                 fs = event_var.info['sfreq']
                 data = data[:,list_idx_channels,:]
                 if type_psd == "welch":
-                    f, Pxx = sc.signal.welch(data, fs = fs, nperseg=300, noverlap=150, detrend="constant")
+                    f, Pxx = sc.signal.welch(data, fs = fs, nperseg=nperseg, noverlap=noverlap, detrend="constant")
                     band_features = np.zeros((data.shape[0],data.shape[1],5))
                     idx = 0
                     for key in band_freqs.keys():
@@ -146,13 +134,7 @@ def band_psd_dataset_creator(files,list_idx_channels,list_labels,type_psd="welch
                         idx += 1
                     band_features = np.array(band_features)
                 if type_psd == "burg":
-                    noverlap = 150
-                    nperseg = 500
-                    fs = 500
-                    f_max = 100
-                    N_fft = 200
-                    filter_order = 19
-                    Pxx, Time_freq, time = spectral_analysis.Power_burg_calculation(data,noverlap,N_fft,f_max, nperseg,filter_order)
+                    Pxx, Time_freq, time = spectral_analysis.Power_burg_calculation(data,noverlap,nfft,fs,nperseg,filter_order)
                 
                 print(band_features.shape)
                 features.append(band_features)
@@ -171,7 +153,7 @@ def band_psd_dataset_creator(files,list_idx_channels,list_labels,type_psd="welch
     
 # create dataset for coherence
 # Create dataset
-def coh_dataset_creator(files,list_idx_channels,list_labels,type_coh="welch"):
+def coh_dataset_creator(files,list_idx_channels,list_labels,type_coh="welch",tmin=0,tmax=4,fs=500,fmin=4,fmax=100,nfft=300,noverlap=150,nperseg=300,filter_order=19):
 
     """
     Take the data from every file and collect only those corresponding to GDF-left or GDF-right in the interest_data list
@@ -188,10 +170,9 @@ def coh_dataset_creator(files,list_idx_channels,list_labels,type_coh="welch"):
 
     for file in files:
         try : 
+            #print(file)
             for event_name in list_labels:
                 raw_training, events_from_annot,event_id = load_file_eeg(filepath = file)
-                tmin = 0
-                tmax = 4
                 event_var = select_Event(event_name,raw_training,events_from_annot,event_id,tmin,tmax,64)
                 data = event_var.get_data()
                 fs = event_var.info['sfreq']
@@ -199,13 +180,14 @@ def coh_dataset_creator(files,list_idx_channels,list_labels,type_coh="welch"):
                 if type_coh == "welch":
                     for idx_chan1 in range(data.shape[1]):
                         for idx_chan2 in range(data.shape[1]):
-                            f, Cxy = sc.signal.coherence(data[:,idx_chan1,:],data[:,idx_chan2,:],fs = fs, nperseg=300, noverlap=150, detrend="constant")
-                            idx_freq = np.argwhere((f >= 4) & (f <= 100)).flatten()
+                            f, Cxy = sc.signal.coherence(data[:,idx_chan1,:],data[:,idx_chan2,:],fs = fs, nperseg=nperseg, noverlap=noverlap, detrend="constant")
+                            idx_freq = np.argwhere((f >= fmin) & (f <= fmax)).flatten()
                             coh_feature = np.zeros((data.shape[0],data.shape[1],data.shape[1],len(idx_freq)))
                             if freqs is None:
                                 freqs = f[idx_freq]
                             coh_feature[:,idx_chan1,idx_chan2,:] = np.abs(Cxy[:,idx_freq])
-                        
+                            features.append(coh_feature)
+                            labels.append(dict_sorted_labels[event_name]*np.ones(data.shape[0]))
                 if type_coh == "burg":
                     noverlap = 150
                     nperseg = 500
@@ -227,7 +209,7 @@ def coh_dataset_creator(files,list_idx_channels,list_labels,type_coh="welch"):
     return features,labels,freqs
     
 class Braccio_Dataset_Multi_Subject():
-    def __init__(self, parent_folder_path, num_subjects, num_sessions, list_idx_channels, list_labels, feature_type):
+    def __init__(self, parent_folder_path, num_subjects, num_sessions, list_idx_channels, list_labels, feature_type, dict_):
         
         # Create the list of folders
         subject_folders = [os.path.join(parent_folder_path, "sub-0" + str(num_sub)) if num_sub < 10 else os.path.join(parent_folder_path, "sub-" + str(num_sub)) for num_sub in num_subjects]
@@ -246,11 +228,11 @@ class Braccio_Dataset_Multi_Subject():
         if feature_type == "time":
             self.features,self.labels = time_dataset_creator(self.file_list,list_idx_channels,list_labels)
         if feature_type == "psd":
-            self.features,self.labels,self.freqs = psd_dataset_creator(self.file_list,list_idx_channels,list_labels)
+            self.features,self.labels,self.freqs = psd_dataset_creator(self.file_list,list_idx_channels,list_labels,type_psd=dict_["type_psd"],tmin=dict_["tmin"],tmax=dict_["tmax"],fs=dict_["fs"],fmin=dict_["fmin"],fmax=dict_["fmax"],nfft=dict_["nfft"],noverlap=dict_["noverlap"],nperseg=dict_["nperseg"],filter_order=dict_["filter_order"])
         if feature_type == "band":
-            self.features,self.labels = band_psd_dataset_creator(self.file_list,list_idx_channels,list_labels)
+            self.features,self.labels = band_psd_dataset_creator(self.file_list,list_idx_channels,list_labels,type_psd=dict_["type_psd"],tmin=dict_["tmin"],tmax=dict_["tmax"],fs=dict_["fs"],nfft=dict_["nfft"],noverlap=dict_["noverlap"],nperseg=dict_["nperseg"],filter_order=dict_["filter_order"])
         if feature_type == "coh":
-            self.features,self.labels,self.freqs = coh_dataset_creator(self.file_list,list_idx_channels,list_labels)
+            self.features,self.labels,self.freqs = coh_dataset_creator(self.file_list,list_idx_channels,list_labels,type_psd=dict_["type_psd"],tmin=dict_["tmin"],tmax=dict_["tmax"],fs=dict_["fs"],fmin=dict_["fmin"],fmax=dict_["fmax"],nfft=dict_["nfft"],noverlap=dict_["noverlap"],nperseg=dict_["nperseg"],filter_order=dict_["filter_order"])
         
     def __len__(self):
         return len(self.features)
@@ -268,7 +250,7 @@ class Physio_Dataset_Multi_Subject():
     Class which creates a dataset for the PhysioNet data
     """
 
-    def __init__(self, parent_folder_path, num_subjects, num_runs, list_idx_channels, list_labels, feature_type):
+    def __init__(self, parent_folder_path, num_subjects, num_runs, list_idx_channels, list_labels, feature_type, dict_):
 
         # Create the list of folders
         subject_folders = []
@@ -296,11 +278,11 @@ class Physio_Dataset_Multi_Subject():
         if feature_type == "time":
             self.features,self.labels = time_dataset_creator(self.file_list,list_idx_channels,list_labels)
         if feature_type == "psd":
-            self.features,self.labels,self.freqs = psd_dataset_creator(self.file_list,list_idx_channels,list_labels)
+            self.features,self.labels,self.freqs = psd_dataset_creator(self.file_list,list_idx_channels,list_labels,type_psd=dict_["type_psd"],tmin=dict_["tmin"],tmax=dict_["tmax"],fs=dict_["fs"],fmin=dict_["fmin"],fmax=dict_["fmax"],nfft=dict_["nfft"],noverlap=dict_["noverlap"],nperseg=dict_["nperseg"],filter_order=dict_["filter_order"])
         if feature_type == "band":
-            self.features,self.labels = band_psd_dataset_creator(self.file_list,list_idx_channels,list_labels)
+            self.features,self.labels = band_psd_dataset_creator(self.file_list,list_idx_channels,list_labels,type_psd=dict_["type_psd"],tmin=dict_["tmin"],tmax=dict_["tmax"],fs=dict_["fs"],nfft=dict_["nfft"],noverlap=dict_["noverlap"],nperseg=dict_["nperseg"],filter_order=dict_["filter_order"])
         if feature_type == "coh":
-            self.features,self.labels,self.freqs = coh_dataset_creator(self.file_list,list_idx_channels,list_labels)
+            self.features,self.labels,self.freqs = coh_dataset_creator(self.file_list,list_idx_channels,list_labels,type_psd=dict_["type_psd"],tmin=dict_["tmin"],tmax=dict_["tmax"],fs=dict_["fs"],fmin=dict_["fmin"],fmax=dict_["fmax"],nfft=dict_["nfft"],noverlap=dict_["noverlap"],nperseg=dict_["nperseg"],filter_order=dict_["filter_order"])
         
     def __len__(self):
         return len(self.features)
@@ -318,7 +300,7 @@ class EEG_Dataset():
     Class which creates a dataset for the PhysioNet data
     """
 
-    def __init__(self, files_list, list_idx_channels, list_labels, feature_type):
+    def __init__(self, files_list, list_idx_channels, list_labels, feature_type, dict_):
 
         self.file_list = files_list
 
@@ -326,11 +308,11 @@ class EEG_Dataset():
         if feature_type == "time":
             self.features,self.labels = time_dataset_creator(self.file_list,list_idx_channels,list_labels)
         if feature_type == "psd":
-            self.features,self.labels,self.freqs = psd_dataset_creator(self.file_list,list_idx_channels,list_labels)
+            self.features,self.labels,self.freqs = psd_dataset_creator(self.file_list,list_idx_channels,list_labels,type_psd=dict_["type_psd"],tmin=dict_["tmin"],tmax=dict_["tmax"],fs=dict_["fs"],fmin=dict_["fmin"],fmax=dict_["fmax"],nfft=dict_["nfft"],noverlap=dict_["noverlap"],nperseg=dict_["nperseg"],filter_order=dict_["filter_order"])
         if feature_type == "band":
-            self.features,self.labels = band_psd_dataset_creator(self.file_list,list_idx_channels,list_labels)
+            self.features,self.labels = band_psd_dataset_creator(self.file_list,list_idx_channels,list_labels,type_psd=dict_["type_psd"],tmin=dict_["tmin"],tmax=dict_["tmax"],fs=dict_["fs"],nfft=dict_["nfft"],noverlap=dict_["noverlap"],nperseg=dict_["nperseg"],filter_order=dict_["filter_order"])
         if feature_type == "coh":
-            self.features,self.labels,self.freqs = coh_dataset_creator(self.file_list,list_idx_channels,list_labels)
+            self.features,self.labels,self.freqs = coh_dataset_creator(self.file_list,list_idx_channels,list_labels,type_psd=dict_["type_psd"],tmin=dict_["tmin"],tmax=dict_["tmax"],fs=dict_["fs"],fmin=dict_["fmin"],fmax=dict_["fmax"],nfft=dict_["nfft"],noverlap=dict_["noverlap"],nperseg=dict_["nperseg"],filter_order=dict_["filter_order"])
         
     def __len__(self):
         return len(self.features)
