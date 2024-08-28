@@ -1,0 +1,58 @@
+
+Physionet : 
+
+EEGNet : chunk_size=641, num_electrodes=12, dropout=0.25, kernel_1=50, kernel_2=25, F1=10, F2=16, D=2, num_classes=2
+- train 1-80, test 80-109 : 0.75
+- train 1-50 + 80-109, test 50-80 : 0.75
+- train 30-109, test 1-30 : 0.77
+
+ATCNet : in_channels=1, num_classes=2, num_windows=5, num_electrodes=12, chunk_size=641
+- train 1-80, test 80-109 : 0.77
+- train 1-50 + 80-109, test 50-80 : 0.76
+- train 30-109, test 1-30 : 0.78
+
+LDA : 
+- train 1-80, test 80-109 : 0.66
+- train 1-50 + 80-109, test 50-80 : 0.66
+- train 30-109, test 1-30 : 0.66
+
+SVM : 
+- train 1-80, test 80-109 : 0.67
+- train 1-50 + 80-109, test 50-80 : 0.67
+- train 30-109, test 1-30 : 0.67
+
+SVM rbf : 
+- train 1-80, test 80-109 : 0.67
+- train 1-50 + 80-109, test 50-80 : 0.67
+- train 30-109, test 1-30 : 0.67
+
+Braccio : 
+
+EEGNet : training on [1,2,3,5,6,7], testing on [8,10,11,13]
+- Transfering to sub 14 
+- Session 1 : 0.75
+- Session 2 : 0.85
+- Session 3 : 0.95
+
+ATCNet : training on [1,2,3,5,6,7], testing on [8,10,11,13]
+- Transfering to sub 14 
+- Session 1 : 0.77
+- Session 2 : 0.98
+- Session 3 : 0.90
+
+LDA : training on sub 14
+- Session 1 : 0.6
+- Session 2 : 0.55
+- Session 3 : 0.8
+
+SVM Linear : training on sub 14
+- Session 1 : 0.75
+- Session 2 : 0.9
+- Session 3 : 0.8 
+
+SVM rbf : training on sub 14
+- Session 1 : 0.675
+- Session 2 : 0.725
+- Session 3 : 0.8
+
+0.9583333730697632 0.7999999523162842 0.75
