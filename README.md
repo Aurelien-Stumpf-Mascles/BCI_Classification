@@ -9,11 +9,9 @@ Brain-Computer Interfaces enable direct communication between the brain and exte
 
 ## Repository Structure
 
-- `data/`: Contains EEG datasets used for training and evaluation.
-- `models/`: Includes implementations of various neural network architectures.
-- `notebooks/`: Jupyter notebooks demonstrating data preprocessing, model training, and evaluation.
-- `scripts/`: Python scripts for data handling and model operations.
-- `results/`: Stores results from model evaluations and experiments.
+- `eeg_project_package/`: Includes implementations of datasets structures, training and various neural network architectures
+- `experiments/`: Jupyter notebooks demonstrating data preprocessing, model training, and evaluation.
+- `test/`: Python scripts which explore diverse methods
 - `README.md`: Project overview and instructions.
 
 ## Getting Started
@@ -42,21 +40,7 @@ Ensure you have the following installed:
 
 ### Usage
 
-1. **Data Preparation**: Place your EEG datasets in the `data/` directory. Ensure they are in the correct format as expected by the data loading scripts.
-
-2. **Model Training**: Use the scripts in the `scripts/` directory to train the models. For example:
-
-   ```bash
-   python scripts/train_model.py --model EEGNet --epochs 100
-   ```
-
-3. **Evaluation**: After training, evaluate the models using the evaluation scripts:
-
-   ```bash
-   python scripts/evaluate_model.py --model EEGNet
-   ```
-
-4. **Jupyter Notebooks**: Explore the `notebooks/` directory for detailed walkthroughs and analyses.
+**Jupyter Notebooks**: Explore the `notebooks/` directory for detailed walkthroughs and analyses.
 
 ## Models Implemented
 
